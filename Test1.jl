@@ -12,7 +12,6 @@ using DelimitedFiles, Interpolations, Plots, VectorizedRoutines
 ## FUNTIONS
 include("GetTime.jl")
 include("RayBender.jl")
-include("RayBender2.jl")
 include("INITIAL_RAYS.jl")
 
 ## LOAD DATA SECTION
