@@ -1,4 +1,5 @@
-function GetTime(ray0, F_Sp)
+# It is a good practice specialize your function
+function GetTime(ray0::Array{Float64, 2}, F_Sp)
     time=0;
     #Loop to evaluate slowness
     for ri=2:size(ray0,1)
@@ -10,5 +11,7 @@ function GetTime(ray0, F_Sp)
                  (ray0[ri,3] - ray0[ri-1,3])^2);
         time += B * C;
     end
-return time
+
+    return time
 end
+
