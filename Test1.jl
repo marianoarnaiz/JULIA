@@ -10,13 +10,13 @@ clearconsole()
 using DelimitedFiles, Interpolations, Plots, VectorizedRoutines
 
 ## FUNTIONS
-include("GetTime.jl")
-include("RayBender.jl")
-include("INITIAL_RAYS.jl")
+include("gettime.jl")
+include("raybender.jl")
+include("initialrays.jl")
 
 ## LOAD DATA SECTION
 #Load AK135 Data
-AK135=readdlm("jAK135.txt",Float64);
+# AK135 = readdlm("jAK135.txt",Float64); # I didn't found this file
 #read input data
 TTDATA0=readdlm("TestData.txt",Float64);
 
@@ -46,38 +46,49 @@ TTDATA=[ ((TTDATA0[:,1].-LONG_0).*112).+baselo ((TTDATA0[:,2].-LAT_0).*112).+bas
 println("Data In Model Coordinates")
 
 ## THE MODEL!
-
-xmin=0; # min longitud in km
-xmax=LONG_Distance; # max longitud in km
-ymin=0; # min latitude in km
-ymax=LAT_Distance; # max latitude in km
-zmin=DEPTH_min; #min depth in the model (we should include topography)
-zmax=300; #max depth in the model;
+# You can use const (minor improvements)
+const xmin = 0; # min longitud in km
+const xmax = LONG_Distance; # max longitud in km
+const ymin = 0; # min latitude in km
+const ymax = LAT_Distance; # max latitude in km
+const zmin = DEPTH_min; #min depth in the model (we should include topography)
+const zmax = 300; #max depth in the model;
 
 # Define spacing in km
-dx=100; #horizontal x cell size
-dy=100; #horizontal y cell size
-dz=1;  #vertical z cell size
+const dx = 100; #horizontal x cell size
+const dy = 100; #horizontal y cell size
+const dz = 1;  #vertical z cell size
 
 # Parameters for ray tracing
-dray=0.05; # Porcentage to change ray
-dr=12; #Nodes in ray. THis inclures the source and receiver
-movedz=dz*dray;
+const dray   = 0.05; # Porcentage to change ray
+const dr     = 12; #Nodes in ray. THis inclures the source and receiver
+const movedz = dz*dray;
 
 ## Inicialize ray tracing parameters!
-ALL_T=zeros(size(TTDATA,1));
-ALL_RAYS=zeros(dr,3,size(TTDATA,1));
-ALL_RAYS=INITIAL_RAYS(TTDATA,ALL_RAYS);
+ALL_T    = zeros(size(TTDATA,1));
+ALL_RAYS = zeros(dr,3,size(TTDATA,1));
+ALL_RAYS = INITIAL_RAYS(TTDATA,ALL_RAYS);
 
 ## Create model Vectors
-vx=collect(xmin:dx:xmax) ; # Vector of X coordinates
-vy=collect(ymin:dy:ymax); # Vector of Y coordinates
-vz=collect(zmin:dz:zmax); # Vector of Z coordinates
+# vx=collect(xmin:dx:xmax) ; # Vector of X coordinates
+# vy=collect(ymin:dy:ymax); # Vector of Y coordinates
+# vz=collect(zmin:dz:zmax); # Vector of Z coordinates
+
+vx=xmin:dx:xmax; # Vector of X coordinates
+vy=ymin:dy:ymax; # Vector of Y coordinates
+vz=zmin:dz:zmax; # Vector of Z coordinates
 
 println("BOX and RAY paramters SET!")
 
 ## INITIAL ModelV
-iVp=LinearInterpolation(AK135[:,1],  AK135[:,2]);
+using Random
+
+# I created this matrix to use as a test purpose
+AKTEST = rand(Int64, (size(vz,1), 3))
+
+iVp = LinearInterpolation(sort(AKTEST[:,1]),  AKTEST[:,2]);
+
+# iVp=LinearInterpolation(AK135[:,1],  AK135[:,2]);
 # To Make the Model Constant Velocity
 ## Generate Slowness Cube
 #Initialize Slowness Model
@@ -96,17 +107,24 @@ knots = ([x for x = xmin:dx:xmax], [y for y = ymin:dy:ymax], [z for z = zmin:dz:
 F_Sp = interpolate(knots, ModelSp, Gridded(Linear()));
 
 ## Perform Ray tracing
-@time for i=1:size(TTDATA,1);
+# In my test break the loop speed up 2x
+@time for i=1:4:size(TTDATA,1);
     # Trace ray by Pseudo-Bending Algorithm
     println("Tracing ray for Source/Event pair: $i")
-     ALL_T[i],ALL_RAYS[:,:,i]=RayBender(ALL_RAYS[:,:,i],dr,zmax,F_Sp,movedz);
+    ALL_T[i],   ALL_RAYS[:,:,i]   = RayBender(ALL_RAYS[:,:,i],   dr, zmax, F_Sp, movedz);
+    ALL_T[i+1], ALL_RAYS[:,:,i+1] = RayBender(ALL_RAYS[:,:,i+1], dr, zmax, F_Sp, movedz);
+    ALL_T[i+2], ALL_RAYS[:,:,i+2] = RayBender(ALL_RAYS[:,:,i+2], dr, zmax, F_Sp, movedz);
+    ALL_T[i+3], ALL_RAYS[:,:,i+3] = RayBender(ALL_RAYS[:,:,i+3], dr, zmax, F_Sp, movedz);
 end
 
 ## FIGURES! LET'S MAKE THEM PRETTY!
 
 #Figure 1. Velocity model and Stations and Events
-p1=plot(AK135[:,2:3],AK135[:,1], yflip = true,color = [:blue :red],label=["Vp" "Vs"])
-Plots.scatter!(iVp(AK135[:,1]),AK135[:,1],markershape = :circle, color = [:black],label="Int Vp")
+p1=plot(AKTEST[:,2:3],AKTEST[:,1], yflip = true,color = [:blue :red],label=["Vp" "Vs"])
+Plots.scatter!(iVp(AKTEST[:,1]),AKTEST[:,1],markershape = :circle, color = [:black],label="Int Vp")
+
+# p1=plot(AK135[:,2:3],AK135[:,1], yflip = true,color = [:blue :red],label=["Vp" "Vs"])
+# Plots.scatter!(iVp(AK135[:,1]),AK135[:,1],markershape = :circle, color = [:black],label="Int Vp")
 plot!(title="AK135 Initial Model")
 plot!(xlabel = "Velocity (km/s)")
 plot!(ylabel = "Depth (km)")
@@ -131,3 +149,4 @@ end
 plot!(ALL_RAYS[:,1,size(ALL_T,1)],ALL_RAYS[:,2,size(ALL_T,1)],ALL_RAYS[:,3,size(ALL_T,1)], color = [:blue],label="Rays")
 scatter!(TTDATA[:,4],TTDATA[:,5],TTDATA[:,6] , markershape = :circle, color = [:red], label="Events")
 savefig("Rays.pdf")
+
